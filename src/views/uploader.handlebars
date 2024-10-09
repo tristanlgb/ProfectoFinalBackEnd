@@ -1,0 +1,21 @@
+<div>
+    <h1>File Upload</h1>
+    <form action="/api/users/{{uid}}/documents" method="POST" enctype="multipart/form-data">
+        <label>Profile Photo:</label>
+        <input type="file" name="profile" />
+        <br />
+        <label>Product Photo:</label>
+        <input type="file" name="products" />
+        <br />
+        <label>Identification:</label>
+        <input type="file" name="identification" />
+        <br />
+        <label>Proof of Address:</label>
+        <input type="file" name="comprobant" />
+        <br />
+        <label>Account Statement:</label>
+        <input type="file" name="accountStatus" />
+        <br />
+        <button type="submit">Upload</button>
+    </form>
+</div>

@@ -1,0 +1,31 @@
+<div>
+    <h1>
+        {{title}}
+    </h1>
+</div>
+<div class="conteiner">
+    <table class="estilo">
+        <tr>
+            <th >ID</th>
+            <th >Producto</th>
+            <th >Precio</th>
+            <th >code</th>
+            <th >stock</th>
+            <th >Categoria</th>
+            <th >Descripcion</th>
+            <th >status</th>
+        </tr>
+        {{#each products}}
+            <tr>
+                <td>{{this._id}}</td>
+                <td>{{this.title}}</td>
+                <td>{{this.price}}</td>
+                <td>{{this.code}}</td>
+                <td>{{this.stock}}</td>
+                <td>{{this.category}}</td>
+                <td>{{this.description}}</td>
+                <td>{{this.status}}</td>
+            </tr>
+        {{/each}}
+    </table>
+</div>

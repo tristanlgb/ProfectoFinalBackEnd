@@ -1,0 +1,13 @@
+<div>
+    <h1>Register</h1>
+    <form action="/api/session/register" method="POST">
+        {{! <input type="text" name="username" placeholder="enter username" required>  }}
+        <input type="text" name="firstName" placeholder="Enter first name" required />
+        <input type="text" name="lastName" placeholder="Enter last name" required />
+        <input type="email" name="email" placeholder="Enter email" required />
+        <input type="date" name="dateOfBirth" required />
+        <input type="password" name="password" placeholder="Enter password" required />
+        <label>Admin<input type="checkbox" name="admin" id="" /></label>
+        <button type="submit">Submit</button>
+    </form>
+</div>

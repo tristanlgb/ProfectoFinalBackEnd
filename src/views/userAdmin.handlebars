@@ -1,0 +1,47 @@
+<div>
+    <h1>Welcome to PokeStoresW</h1>
+    <div class="cards">
+        <table class="style">
+            <thead>
+                <tr>
+                    <th>First Name</th>
+                    <th>Last Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Last Connection</th>
+                    <th>Change Role</th>
+                    <th>Delete User</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{#each users}}
+                    <tr>
+                        <td>{{this.firstName}}</td>
+                        <td>{{this.lastName}}</td>
+                        <td>{{this.email}}</td>
+                        <td>{{this.role}}</td>
+                        <td>{{this.lastConnection}}</td>
+                        <td>
+                            <form action="/api/users/premium/{{this._id}}" method="get">
+                                <button type="submit">Change Role</button>
+                            </form>
+                        </td>
+                        <td>
+                            <form id="deleteUser{{this._id}}" data-user-id="{{this._id}}" data-user-role="{{this.role}}">
+                                <button type="submit" class="deleteUser">Delete User</button>
+                            </form>
+                        </td>
+                    </tr>
+                {{/each}}
+            </tbody>
+        </table>
+    </div>
+    <center>
+        {{#if hasPrevPage}}
+            <a href="/products?page={{prevPage}}"><button type="button">Previous</button></a>
+        {{/if}}
+        {{#if hasNextPage}}
+            <a href="/products?page={{nextPage}}"><button type="button">Next</button></a>
+        {{/if}}
+    </center>
+</div>

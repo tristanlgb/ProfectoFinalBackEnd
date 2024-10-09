@@ -1,0 +1,17 @@
+<div>
+    <p>CART ID {{id}}</p>
+    <div class="cards">
+        {{#each products}}
+            <div class="cardsItems">
+                <strong>Product Name: </strong>{{this.idProduct.title}}
+                <strong>Description: </strong>{{this.idProduct.description}}
+                <strong>Code: </strong>{{this.idProduct.code}}
+                <strong>Price: </strong>{{this.idProduct.price}}
+                <strong>Quantity: </strong>{{this.quantity}}
+            </div>
+        {{/each}}
+    </div>
+    <form id="buy" action="/api/carts/{{cart}}/purchase" method="GET">
+        <button>Buy</button>
+    </form>
+</div>
