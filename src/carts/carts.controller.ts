@@ -99,10 +99,4 @@ import {
       this.logger.log('Cart fetched successfully');
       return { status: 'success', payload: cart };
     }
-  
-    // Other methods...
-  }
-  
-
-
-  // 
+}
