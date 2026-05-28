@@ -1,4 +1,12 @@
-import { IsString, IsNumber, IsOptional, IsBoolean } from 'class-validator';
+// src/products/dto/create-product.dto.ts
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsBoolean,
+  Min,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateProductDto {
   @IsString()
@@ -8,7 +16,9 @@ export class CreateProductDto {
   @IsOptional()
   readonly description?: string;
 
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   readonly price: number;
 
   @IsString()
@@ -19,7 +29,9 @@ export class CreateProductDto {
   @IsOptional()
   readonly status?: boolean;
 
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   @IsOptional()
   readonly stock?: number;
 
@@ -30,4 +42,8 @@ export class CreateProductDto {
   @IsString()
   @IsOptional()
   readonly thumbnail?: string;
+
+  @IsString()
+  @IsOptional()
+  readonly owner?: string;
 }
