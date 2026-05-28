@@ -1,38 +1,37 @@
 // src/products/schemas/product.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Document } from 'mongoose';
 
 export type ProductDocument = Product & Document;
 
-@Schema()
+@Schema({ timestamps: true })
 export class Product {
-  @Prop({ required: true })
+  @Prop({ required: true, trim: true })
   title: string;
 
-  @Prop()
+  @Prop({ default: '', trim: true })
   description: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, min: 0 })
   price: number;
 
-  @Prop()
+  @Prop({ default: 'general', trim: true })
   category: string;
 
   @Prop({ default: true })
   status: boolean;
 
-  @Prop()
+  @Prop({ default: 0, min: 0 })
   stock: number;
 
-  @Prop()
+  @Prop({ required: true, unique: true, trim: true })
   code: string;
 
-  @Prop()
+  @Prop({ default: '' })
   thumbnail: string;
 
-  // Add this field
-  @Prop({ type: String, required: true })
-  owner: string; // Or use 'Types.ObjectId' if referencing a User document
+  @Prop({ type: String, default: 'admin' })
+  owner: string;
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
