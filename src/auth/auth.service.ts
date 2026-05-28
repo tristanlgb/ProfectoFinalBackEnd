@@ -1,7 +1,8 @@
 // src/auth/auth.service.ts
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { UsersService } from '../users/users.service'; // Assuming you have a UsersService
+
+import { UsersService } from '../users/users.service';
 import { BcryptHashUtil } from '../common/utils/bcrypt-hash.util';
 
 @Injectable()
@@ -11,23 +12,37 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  // Validate user credentials
-  async validateUser(email: string, password: string): Promise<any> {
+  async validateUser(email: string, password: string): Promise<any | null> {
     const user = await this.usersService.findByEmail(email);
-    if (user && (await BcryptHashUtil.comparePassword(password, user.password))) {
-      // Exclude sensitive information
-      const { password, ...result } = user;
-      return result;
+
+    if (!user) {
+      return null;
     }
-    return null;
+
+    const isValidPassword = await BcryptHashUtil.comparePassword(
+      password,
+      user.password,
+    );
+
+    if (!isValidPassword) {
+      return null;
+    }
+
+    const userObject = user.toObject();
+    const { password: _password, ...result } = userObject;
+
+    return result;
   }
 
-  // Generate JWT token
   async login(user: any) {
-    const payload = { email: user.email, sub: user.userId, role: user.role };
+    const payload = {
+      email: user.email,
+      sub: user._id,
+      role: user.role,
+    };
+
     return {
       access_token: this.jwtService.sign(payload),
     };
   }
 }
-
