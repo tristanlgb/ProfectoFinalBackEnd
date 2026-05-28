@@ -17,11 +17,11 @@ export class UsersService {
     private readonly userModel: Model<UserDocument>,
   ) {}
 
-  async findAll(): Promise<User[]> {
+  async findAll(): Promise<UserDocument[]> {
     return this.userModel.find().exec();
   }
 
-  async findOne(id: string): Promise<User> {
+  async findOne(id: string): Promise<UserDocument> {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid user ID format');
     }
@@ -35,11 +35,11 @@ export class UsersService {
     return user;
   }
 
-  async findByEmail(email: string): Promise<User | null> {
+  async findByEmail(email: string): Promise<UserDocument | null> {
     return this.userModel.findOne({ email }).exec();
   }
 
-  async create(createUserDto: any): Promise<User> {
+  async create(createUserDto: any): Promise<UserDocument> {
     const hashedPassword = await BcryptHashUtil.hashPassword(
       createUserDto.password,
     );
@@ -52,7 +52,7 @@ export class UsersService {
     return createdUser.save();
   }
 
-  async update(id: string, updateUserDto: any): Promise<User> {
+  async update(id: string, updateUserDto: any): Promise<UserDocument> {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid user ID format');
     }
@@ -74,7 +74,7 @@ export class UsersService {
     return updatedUser;
   }
 
-  async delete(id: string): Promise<User> {
+  async delete(id: string): Promise<UserDocument> {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid user ID format');
     }
