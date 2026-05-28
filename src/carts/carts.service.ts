@@ -1,272 +1,265 @@
 // src/carts/carts.service.ts
 import {
-    Injectable,
-    NotFoundException,
-    BadRequestException,
-    ForbiddenException,
-    Logger,
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+
 import { Cart, CartDocument } from './schemas/cart.schema';
 import { ProductDocument } from '../products/schemas/product.schema';
-import { Model, Types } from 'mongoose';
-import { CreateCartDto } from './dto/create-cart.dto';
 import { UpdateCartDto } from './dto/update-cart.dto';
 import { ProductsService } from '../products/products.service';
 
+type PurchaseResult = {
+  status: 'success';
+  totalAmount: number;
+  unavailableProducts: Types.ObjectId[];
+};
+
 @Injectable()
 export class CartsService {
-    private readonly logger = new Logger(CartsService.name);
+  private readonly logger = new Logger(CartsService.name);
 
-    constructor(
-        @InjectModel(Cart.name) private cartModel: Model<CartDocument>,
-        private readonly productsService: ProductsService,
-    ) {}
+  constructor(
+    @InjectModel(Cart.name)
+    private readonly cartModel: Model<CartDocument>,
+    private readonly productsService: ProductsService,
+  ) {}
 
-    // Create a new cart
-    async createCart(): Promise<Cart> {
-        this.logger.log('Creating a new cart...');
-        const newCart = new this.cartModel({ items: [] });
-        return newCart.save();
+  async createCart(): Promise<CartDocument> {
+    this.logger.log('Creating a new cart...');
+
+    const newCart = new this.cartModel({
+      items: [],
+    });
+
+    return newCart.save();
+  }
+
+  async getCartById(cartId: string): Promise<CartDocument> {
+    this.validateObjectId(cartId, 'cart');
+
+    const cart = await this.cartModel
+      .findById(cartId)
+      .populate('items.product')
+      .exec();
+
+    if (!cart) {
+      throw new NotFoundException(`Cart with ID ${cartId} does not exist`);
     }
 
-    // Get a cart by ID
-    async getCartById(cartId: string): Promise<Cart> {
-        this.logger.log(`Fetching cart with ID: ${cartId}`);
-        if (!Types.ObjectId.isValid(cartId)) {
-            throw new BadRequestException('Invalid cart ID format');
-        }
+    return cart;
+  }
 
-        const cart = await this.cartModel
-            .findById(cartId)
-            .populate('items.product')
-            .exec();
+  async addProduct(
+    cartId: string,
+    productId: string,
+    quantity = 1,
+    user: any,
+  ): Promise<CartDocument> {
+    this.validateObjectId(cartId, 'cart');
+    this.validateObjectId(productId, 'product');
+    this.validateQuantity(quantity);
 
-        if (!cart) {
-            this.logger.warn(`Cart with ID ${cartId} not found`);
-            throw new NotFoundException(`Cart with ID ${cartId} does not exist`);
-        }
+    const cart = await this.cartModel.findById(cartId).exec();
 
-        return cart;
+    if (!cart) {
+      throw new NotFoundException(`Cart with ID ${cartId} does not exist`);
     }
 
-    // Add a product to the cart
-    async addProduct(
-        cartId: string,
-        productId: string,
-        quantity: number,
-        user: any,
-    ): Promise<Cart> {
-        this.logger.log(
-            `Adding product ${productId} to cart ${cartId} with quantity ${quantity}`,
+    const product = await this.productsService.getProductById(productId);
+
+    if (product.stock <= 0) {
+      throw new BadRequestException(
+        `Product with ID ${productId} is out of stock`,
+      );
+    }
+
+    if (quantity > product.stock) {
+      throw new BadRequestException(
+        `Not enough stock. Available stock: ${product.stock}`,
+      );
+    }
+
+    if (user?.role === 'premium' && user?.email === product.owner) {
+      throw new ForbiddenException('You cannot add your own product');
+    }
+
+    const itemIndex = cart.items.findIndex(
+      (item) => this.getItemProductId(item.product) === productId,
+    );
+
+    if (itemIndex > -1) {
+      const newQuantity = cart.items[itemIndex].quantity + quantity;
+
+      if (newQuantity > product.stock) {
+        throw new BadRequestException(
+          `Not enough stock. Available stock: ${product.stock}`,
         );
+      }
 
-        if (!Types.ObjectId.isValid(cartId) || !Types.ObjectId.isValid(productId)) {
-            throw new BadRequestException('Invalid cart ID or product ID format');
-        }
-
-        const cart = await this.cartModel.findById(cartId).exec();
-        if (!cart) {
-            this.logger.warn(`Cart with ID ${cartId} not found`);
-            throw new NotFoundException(`Cart with ID ${cartId} does not exist`);
-        }
-
-        const product = await this.productsService.getProductById(productId);
-        if (!product) {
-            this.logger.warn(`Product with ID ${productId} not found`);
-            throw new NotFoundException(`Product with ID ${productId} does not exist`);
-        }
-
-        if (product.stock <= 0) {
-            this.logger.warn(`Product with ID ${productId} is out of stock`);
-            throw new BadRequestException(
-                `Product with ID ${productId} is out of stock`,
-            );
-        }
-
-        if (user.role === 'premium' && user.email === product.owner) {
-            this.logger.warn(`User cannot add their own product`);
-            throw new ForbiddenException(`You cannot add your own product`);
-        }
-
-        // Check if the product already exists in the cart
-        const itemIndex = cart.items.findIndex((item) => {
-            let itemProductId: string;
-
-            if (item.product instanceof Types.ObjectId) {
-                itemProductId = item.product.toHexString();
-            } else {
-                const productDoc = item.product as ProductDocument;
-                itemProductId = (productDoc._id as Types.ObjectId).toHexString();
-            }
-
-            return itemProductId === productId;
-        });
-
-        if (itemIndex > -1) {
-            // Update the quantity
-            cart.items[itemIndex].quantity += quantity;
-        } else {
-            // Add new product to cart
-            cart.items.push({
-                product: new Types.ObjectId(productId),
-                quantity: quantity,
-            });
-        }
-
-        // Save the updated cart
-        await cart.save();
-
-        // Optionally, reduce the stock of the product
-        // await this.productsService.decreaseStock(productId, quantity);
-
-        this.logger.log(`Product ${productId} added to cart ${cartId}`);
-        return this.getCartById(cartId);
+      cart.items[itemIndex].quantity = newQuantity;
+    } else {
+      cart.items.push({
+        product: new Types.ObjectId(productId),
+        quantity,
+      });
     }
 
-    // Update cart items
-    async updateCart(
-        cartId: string,
-        updateCartDto: UpdateCartDto,
-    ): Promise<Cart> {
-        this.logger.log(`Updating cart with ID: ${cartId}`);
-        if (!Types.ObjectId.isValid(cartId)) {
-            throw new BadRequestException('Invalid cart ID format');
-        }
+    await cart.save();
 
-        const cart = await this.cartModel.findById(cartId).exec();
-        if (!cart) {
-            this.logger.warn(`Cart with ID ${cartId} not found`);
-            throw new NotFoundException(`Cart with ID ${cartId} does not exist`);
-        }
+    this.logger.log(`Product ${productId} added to cart ${cartId}`);
+    return this.getCartById(cartId);
+  }
 
-        cart.items = updateCartDto.items.map((item) => ({
-            product: new Types.ObjectId(item.product),
-            quantity: item.quantity,
-        }));
+  async updateCart(
+    cartId: string,
+    updateCartDto: UpdateCartDto,
+  ): Promise<CartDocument> {
+    this.validateObjectId(cartId, 'cart');
 
-        await cart.save();
+    const cart = await this.cartModel.findById(cartId).exec();
 
-        this.logger.log(`Cart ${cartId} updated successfully`);
-        return this.getCartById(cartId);
+    if (!cart) {
+      throw new NotFoundException(`Cart with ID ${cartId} does not exist`);
     }
 
-    // Remove a product from the cart
-    async removeProduct(cartId: string, productId: string): Promise<Cart> {
-        this.logger.log(
-            `Removing product ${productId} from cart ${cartId}`,
+    if (!updateCartDto.items || !Array.isArray(updateCartDto.items)) {
+      throw new BadRequestException('Items must be an array');
+    }
+
+    for (const item of updateCartDto.items) {
+      this.validateObjectId(item.product, 'product');
+      this.validateQuantity(item.quantity);
+
+      const product = await this.productsService.getProductById(item.product);
+
+      if (item.quantity > product.stock) {
+        throw new BadRequestException(
+          `Not enough stock for product ${item.product}. Available stock: ${product.stock}`,
         );
-
-        if (!Types.ObjectId.isValid(cartId) || !Types.ObjectId.isValid(productId)) {
-            throw new BadRequestException('Invalid cart ID or product ID format');
-        }
-
-        const cart = await this.cartModel.findById(cartId).exec();
-        if (!cart) {
-            this.logger.warn(`Cart with ID ${cartId} not found`);
-            throw new NotFoundException(`Cart with ID ${cartId} does not exist`);
-        }
-
-        const itemIndex = cart.items.findIndex((item) => {
-            let itemProductId: string;
-
-            if (item.product instanceof Types.ObjectId) {
-                itemProductId = item.product.toHexString();
-            } else {
-                const productDoc = item.product as ProductDocument;
-                itemProductId = (productDoc._id as Types.ObjectId).toHexString();
-            }
-
-            return itemProductId === productId;
-        });
-
-        if (itemIndex === -1) {
-            this.logger.warn(`Product ${productId} not found in cart ${cartId}`);
-            throw new NotFoundException(`Product not found in cart`);
-        }
-
-        // Remove the product from the cart
-        cart.items.splice(itemIndex, 1);
-        await cart.save();
-
-        this.logger.log(
-            `Product ${productId} removed from cart ${cartId} successfully`,
-        );
-        return this.getCartById(cartId);
+      }
     }
 
-    // Clear all products from the cart
-    async clearCart(cartId: string): Promise<Cart> {
-        this.logger.log(`Clearing cart with ID: ${cartId}`);
-        if (!Types.ObjectId.isValid(cartId)) {
-            throw new BadRequestException('Invalid cart ID format');
-        }
+    cart.items = updateCartDto.items.map((item) => ({
+      product: new Types.ObjectId(item.product),
+      quantity: item.quantity,
+    }));
 
-        const cart = await this.cartModel.findById(cartId).exec();
-        if (!cart) {
-            this.logger.warn(`Cart with ID ${cartId} not found`);
-            throw new NotFoundException(`Cart with ID ${cartId} does not exist`);
-        }
+    await cart.save();
 
-        cart.items = [];
-        await cart.save();
+    this.logger.log(`Cart ${cartId} updated successfully`);
+    return this.getCartById(cartId);
+  }
 
-        this.logger.log(`Cart ${cartId} cleared successfully`);
-        return this.getCartById(cartId);
+  async removeProduct(cartId: string, productId: string): Promise<CartDocument> {
+    this.validateObjectId(cartId, 'cart');
+    this.validateObjectId(productId, 'product');
+
+    const cart = await this.cartModel.findById(cartId).exec();
+
+    if (!cart) {
+      throw new NotFoundException(`Cart with ID ${cartId} does not exist`);
     }
 
-    // Purchase the cart (simplified example)
-    async purchaseCart(cartId: string, user: any): Promise<any> {
-        this.logger.log(`Purchasing cart with ID: ${cartId}`);
-        if (!Types.ObjectId.isValid(cartId)) {
-            throw new BadRequestException('Invalid cart ID format');
-        }
+    const itemIndex = cart.items.findIndex(
+      (item) => this.getItemProductId(item.product) === productId,
+    );
 
-        const cart = await this.cartModel.findById(cartId).populate('items.product').exec();
-        if (!cart) {
-            this.logger.warn(`Cart with ID ${cartId} not found`);
-            throw new NotFoundException(`Cart with ID ${cartId} does not exist`);
-        }
-
-        let totalAmount = 0;
-        const unavailableProducts = [];
-
-        for (const item of cart.items) {
-            let product: ProductDocument;
-
-            if (item.product instanceof Types.ObjectId) {
-                // If item.product is still an ObjectId, fetch the product
-                product = await this.productsService.getProductById(item.product.toHexString());
-            } else {
-                product = item.product as ProductDocument;
-            }
-
-            if (product.stock >= item.quantity) {
-                // Deduct the stock
-                product.stock -= item.quantity;
-                await product.save();
-
-                // Calculate total amount
-                totalAmount += product.price * item.quantity;
-            } else {
-                // Add to unavailable products
-                unavailableProducts.push(product._id);
-            }
-        }
-
-        // Clear the cart
-        cart.items = [];
-        await cart.save();
-
-        // Generate a purchase record (e.g., an order) if needed
-        // ...
-
-        this.logger.log(`Cart ${cartId} purchased successfully`);
-
-        return {
-            status: 'success',
-            totalAmount,
-            unavailableProducts,
-        };
+    if (itemIndex === -1) {
+      throw new NotFoundException(`Product not found in cart`);
     }
+
+    cart.items.splice(itemIndex, 1);
+    await cart.save();
+
+    this.logger.log(
+      `Product ${productId} removed from cart ${cartId} successfully`,
+    );
+
+    return this.getCartById(cartId);
+  }
+
+  async clearCart(cartId: string): Promise<CartDocument> {
+    this.validateObjectId(cartId, 'cart');
+
+    const cart = await this.cartModel.findById(cartId).exec();
+
+    if (!cart) {
+      throw new NotFoundException(`Cart with ID ${cartId} does not exist`);
+    }
+
+    cart.items = [];
+    await cart.save();
+
+    this.logger.log(`Cart ${cartId} cleared successfully`);
+    return this.getCartById(cartId);
+  }
+
+  async purchaseCart(cartId: string, user: any): Promise<PurchaseResult> {
+    this.validateObjectId(cartId, 'cart');
+
+    const cart = await this.cartModel
+      .findById(cartId)
+      .populate('items.product')
+      .exec();
+
+    if (!cart) {
+      throw new NotFoundException(`Cart with ID ${cartId} does not exist`);
+    }
+
+    let totalAmount = 0;
+    const unavailableProducts: Types.ObjectId[] = [];
+
+    for (const item of cart.items) {
+      const product =
+        item.product instanceof Types.ObjectId
+          ? await this.productsService.getProductById(item.product.toHexString())
+          : (item.product as ProductDocument);
+
+      if (product.stock >= item.quantity) {
+        product.stock -= item.quantity;
+        await product.save();
+
+        totalAmount += product.price * item.quantity;
+      } else {
+        unavailableProducts.push(product._id as Types.ObjectId);
+      }
+    }
+
+    cart.items = [];
+    await cart.save();
+
+    this.logger.log(`Cart ${cartId} purchased successfully`);
+
+    return {
+      status: 'success',
+      totalAmount,
+      unavailableProducts,
+    };
+  }
+
+  private validateObjectId(id: string, resourceName: string): void {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException(`Invalid ${resourceName} ID format`);
+    }
+  }
+
+  private validateQuantity(quantity: number): void {
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      throw new BadRequestException('Quantity must be a number greater than 0');
+    }
+  }
+
+  private getItemProductId(product: Types.ObjectId | ProductDocument): string {
+    if (product instanceof Types.ObjectId) {
+      return product.toHexString();
+    }
+
+    return (product._id as Types.ObjectId).toHexString();
+  }
 }
