@@ -5,11 +5,17 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './jwt.strategy';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UsersModule } from '../users/users.module'; // Assuming you have a UsersModule
+import { AuthModule } from './auth/auth.module';
+
 
 @Module({
   imports: [
-    ConfigModule,
     PassportModule,
+     ConfigModule.forRoot(),
+    MongooseModule.forRootAsync(...),
+    ProductsModule,
+    CartsModule,
+    AuthModule,
     UsersModule, // Import UsersModule if needed for user validation
     JwtModule.registerAsync({
       imports: [ConfigModule],
