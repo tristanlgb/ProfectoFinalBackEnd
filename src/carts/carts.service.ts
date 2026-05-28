@@ -14,6 +14,11 @@ import { ProductDocument } from '../products/schemas/product.schema';
 import { UpdateCartDto } from './dto/update-cart.dto';
 import { ProductsService } from '../products/products.service';
 
+type AuthUser = {
+  email?: string;
+  role?: string;
+};
+
 type PurchaseResult = {
   status: 'success';
   totalAmount: number;
@@ -31,11 +36,11 @@ export class CartsService {
   ) {}
 
   async createCart(): Promise<CartDocument> {
-    this.logger.log('Creating a new cart...');
-
     const newCart = new this.cartModel({
       items: [],
     });
+
+    this.logger.log('Cart created successfully');
 
     return newCart.save();
   }
@@ -59,7 +64,7 @@ export class CartsService {
     cartId: string,
     productId: string,
     quantity = 1,
-    user: any,
+    user?: AuthUser,
   ): Promise<CartDocument> {
     this.validateObjectId(cartId, 'cart');
     this.validateObjectId(productId, 'product');
@@ -73,17 +78,7 @@ export class CartsService {
 
     const product = await this.productsService.getProductById(productId);
 
-    if (product.stock <= 0) {
-      throw new BadRequestException(
-        `Product with ID ${productId} is out of stock`,
-      );
-    }
-
-    if (quantity > product.stock) {
-      throw new BadRequestException(
-        `Not enough stock. Available stock: ${product.stock}`,
-      );
-    }
+    this.validateProductStock(product, quantity);
 
     if (user?.role === 'premium' && user?.email === product.owner) {
       throw new ForbiddenException('You cannot add your own product');
@@ -93,14 +88,10 @@ export class CartsService {
       (item) => this.getItemProductId(item.product) === productId,
     );
 
-    if (itemIndex > -1) {
+    if (itemIndex >= 0) {
       const newQuantity = cart.items[itemIndex].quantity + quantity;
 
-      if (newQuantity > product.stock) {
-        throw new BadRequestException(
-          `Not enough stock. Available stock: ${product.stock}`,
-        );
-      }
+      this.validateProductStock(product, newQuantity);
 
       cart.items[itemIndex].quantity = newQuantity;
     } else {
@@ -113,6 +104,7 @@ export class CartsService {
     await cart.save();
 
     this.logger.log(`Product ${productId} added to cart ${cartId}`);
+
     return this.getCartById(cartId);
   }
 
@@ -138,11 +130,7 @@ export class CartsService {
 
       const product = await this.productsService.getProductById(item.product);
 
-      if (item.quantity > product.stock) {
-        throw new BadRequestException(
-          `Not enough stock for product ${item.product}. Available stock: ${product.stock}`,
-        );
-      }
+      this.validateProductStock(product, item.quantity);
     }
 
     cart.items = updateCartDto.items.map((item) => ({
@@ -153,10 +141,14 @@ export class CartsService {
     await cart.save();
 
     this.logger.log(`Cart ${cartId} updated successfully`);
+
     return this.getCartById(cartId);
   }
 
-  async removeProduct(cartId: string, productId: string): Promise<CartDocument> {
+  async removeProduct(
+    cartId: string,
+    productId: string,
+  ): Promise<CartDocument> {
     this.validateObjectId(cartId, 'cart');
     this.validateObjectId(productId, 'product');
 
@@ -171,10 +163,11 @@ export class CartsService {
     );
 
     if (itemIndex === -1) {
-      throw new NotFoundException(`Product not found in cart`);
+      throw new NotFoundException(`Product ${productId} not found in cart`);
     }
 
     cart.items.splice(itemIndex, 1);
+
     await cart.save();
 
     this.logger.log(
@@ -194,13 +187,15 @@ export class CartsService {
     }
 
     cart.items = [];
+
     await cart.save();
 
     this.logger.log(`Cart ${cartId} cleared successfully`);
+
     return this.getCartById(cartId);
   }
 
-  async purchaseCart(cartId: string, user: any): Promise<PurchaseResult> {
+  async purchaseCart(cartId: string): Promise<PurchaseResult> {
     this.validateObjectId(cartId, 'cart');
 
     const cart = await this.cartModel
@@ -216,10 +211,7 @@ export class CartsService {
     const unavailableProducts: Types.ObjectId[] = [];
 
     for (const item of cart.items) {
-      const product =
-        item.product instanceof Types.ObjectId
-          ? await this.productsService.getProductById(item.product.toHexString())
-          : (item.product as ProductDocument);
+      const product = await this.resolveProduct(item.product);
 
       if (product.stock >= item.quantity) {
         product.stock -= item.quantity;
@@ -232,6 +224,7 @@ export class CartsService {
     }
 
     cart.items = [];
+
     await cart.save();
 
     this.logger.log(`Cart ${cartId} purchased successfully`);
@@ -253,6 +246,33 @@ export class CartsService {
     if (!Number.isFinite(quantity) || quantity <= 0) {
       throw new BadRequestException('Quantity must be a number greater than 0');
     }
+  }
+
+  private validateProductStock(
+    product: ProductDocument,
+    quantity: number,
+  ): void {
+    if (product.stock <= 0) {
+      throw new BadRequestException(
+        `Product with ID ${product._id} is out of stock`,
+      );
+    }
+
+    if (quantity > product.stock) {
+      throw new BadRequestException(
+        `Not enough stock. Available stock: ${product.stock}`,
+      );
+    }
+  }
+
+  private async resolveProduct(
+    product: Types.ObjectId | ProductDocument,
+  ): Promise<ProductDocument> {
+    if (product instanceof Types.ObjectId) {
+      return this.productsService.getProductById(product.toHexString());
+    }
+
+    return product;
   }
 
   private getItemProductId(product: Types.ObjectId | ProductDocument): string {
